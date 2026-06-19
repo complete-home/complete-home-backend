@@ -1,0 +1,34 @@
+{
+  "name": "complete-home-backend",
+  "version": "1.0.0",
+  "description": "Complete Home ERP — REST API (MongoDB)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "seed": "node src/scripts/seed.js",
+    "seed:planning-checklists": "node src/scripts/seed-planning-checklists.js",
+    "seed:material-brands": "node src/scripts/seed-material-brands.js",
+    "seed:execution-checklists": "node src/scripts/seed-execution-checklists.js",
+    "seed:site-management": "node src/scripts/seed-site-management-pooja.js",
+    "migrate:sheet-codes": "node src/scripts/migrate-checklist-sheet-codes.js",
+    "seed:uom": "node src/scripts/seed-uom-lookup.js",
+    "seed:all-checklists": "npm run seed:planning-checklists && npm run seed:material-brands && npm run seed:execution-checklists && npm run seed:site-management",
+    "smoke:five-phases": "node src/scripts/smoke-five-phases.js",
+    "seed:workflows-from-checklists": "node src/scripts/seed-workflows-from-checklists.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-validator": "^7.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "morgan": "^1.10.0"
+  }
+}

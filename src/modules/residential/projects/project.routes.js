@@ -1,0 +1,302 @@
+import { Router } from "express";
+import { authenticate } from "../../../core/middleware/auth.js";
+import { requirePermission } from "../../../core/middleware/authorize.js";
+import * as checklistController from "../checklists/checklist.controller.js";
+import * as materialController from "../materials/materialSelection.controller.js";
+import * as siteManagementController from "../siteManagement/siteManagement.controller.js";
+import * as phaseConfigController from "./projectPhaseConfig.controller.js";
+import * as projectAgreementController from "./projectAgreement.controller.js";
+import * as projectExecutionAgreementController from "./projectExecutionAgreement.controller.js";
+import * as projectController from "./project.controller.js";
+import * as projectReportController from "./projectReport.controller.js";
+
+const router = Router();
+router.use(authenticate);
+
+router.get(
+  "/",
+  requirePermission("residential.projects.view"),
+  projectController.list,
+);
+
+router.get(
+  "/reports/portfolio",
+  requirePermission("residential.projects.view"),
+  projectReportController.listPortfolio,
+);
+router.get(
+  "/report-field-definitions",
+  requirePermission("residential.projects.view"),
+  projectReportController.listFieldDefinitions,
+);
+router.post(
+  "/report-field-definitions",
+  requirePermission("residential.projects.update"),
+  projectReportController.createFieldDefinition,
+);
+
+router.get(
+  "/:id",
+  requirePermission("residential.projects.view"),
+  projectController.getOne,
+);
+router.get(
+  "/:id/tasks-kanban",
+  requirePermission("residential.projects.tasks.view"),
+  projectController.getTasksKanban,
+);
+router.post(
+  "/",
+  requirePermission("residential.projects.create"),
+  projectController.create,
+);
+router.patch(
+  "/:id",
+  requirePermission("residential.projects.update"),
+  projectController.update,
+);
+
+router.get(
+  "/:id/report",
+  requirePermission("residential.projects.view"),
+  projectReportController.getReport,
+);
+router.get(
+  "/:id/reports",
+  requirePermission("residential.projects.view"),
+  projectReportController.getAllReports,
+);
+router.patch(
+  "/:id/report/values",
+  requirePermission("residential.projects.update"),
+  projectReportController.patchReportValues,
+);
+
+router.get(
+  "/:id/finance/summary",
+  requirePermission("residential.projects.view"),
+  projectController.getFinanceSummary,
+);
+router.get(
+  "/:id/finance/quotations",
+  requirePermission("residential.projects.view"),
+  projectController.listFinanceQuotations,
+);
+router.post(
+  "/:id/finance/quotations",
+  requirePermission("residential.projects.update"),
+  projectController.createFinanceQuotation,
+);
+router.get(
+  "/:id/finance/payments",
+  requirePermission("residential.projects.view"),
+  projectController.listFinancePayments,
+);
+router.post(
+  "/:id/finance/obligations",
+  requirePermission("residential.projects.update"),
+  projectController.createFinanceObligation,
+);
+router.post(
+  "/:id/finance/obligations/:obligationId/payments",
+  requirePermission("residential.projects.update"),
+  projectController.recordFinancePayment,
+);
+router.get(
+  "/:id/finance/payees",
+  requirePermission("residential.projects.view"),
+  projectController.listFinancePayees,
+);
+router.get(
+  "/:id/finance/payees/:payeeKey",
+  requirePermission("residential.projects.view"),
+  projectController.getFinancePayee,
+);
+router.get(
+  "/:id/finance/ledger",
+  requirePermission("residential.projects.view"),
+  projectController.getFinanceLedger,
+);
+router.get(
+  "/:id/phases",
+  requirePermission("residential.projects.view"),
+  projectController.getPhases,
+);
+router.patch(
+  "/:id/phases",
+  requirePermission("residential.projects.update"),
+  projectController.updatePhases,
+);
+
+router.get(
+  "/:id/checklists",
+  requirePermission("residential.projects.view"),
+  checklistController.list,
+);
+router.post(
+  "/:id/checklists/initialize",
+  requirePermission("residential.projects.update"),
+  checklistController.initialize,
+);
+router.patch(
+  "/:id/checklists/bulk",
+  requirePermission("residential.projects.update"),
+  checklistController.bulkUpdate,
+);
+router.post(
+  "/:id/checklists/workflows",
+  requirePermission("residential.projects.update"),
+  checklistController.attachWorkflow,
+);
+router.post(
+  "/:id/checklists/items",
+  requirePermission("residential.projects.update"),
+  checklistController.addItem,
+);
+router.delete(
+  "/:id/checklists/items/:itemId",
+  requirePermission("residential.projects.update"),
+  checklistController.removeItem,
+);
+
+router.get(
+  "/:id/phase-config",
+  requirePermission("residential.projects.view"),
+  phaseConfigController.get,
+);
+router.post(
+  "/:id/phase-config/sections",
+  requirePermission("residential.projects.update"),
+  phaseConfigController.addSection,
+);
+router.post(
+  "/:id/phase-config/material-categories",
+  requirePermission("residential.projects.update"),
+  phaseConfigController.addMaterialCategory,
+);
+router.post(
+  "/:id/phase-config/material-subtabs",
+  requirePermission("residential.projects.update"),
+  phaseConfigController.addMaterialSubTab,
+);
+router.patch(
+  "/:id/phase-config/sections",
+  requirePermission("residential.projects.update"),
+  phaseConfigController.updateSection,
+);
+router.delete(
+  "/:id/phase-config/sections/:sectionId",
+  requirePermission("residential.projects.update"),
+  phaseConfigController.deleteSection,
+);
+
+router.get(
+  "/:id/material/selections",
+  requirePermission("residential.projects.view"),
+  materialController.list,
+);
+router.post(
+  "/:id/material/selections/initialize",
+  requirePermission("residential.projects.update"),
+  materialController.initialize,
+);
+router.patch(
+  "/:id/material/selections/bulk",
+  requirePermission("residential.projects.update"),
+  materialController.bulkUpdate,
+);
+router.post(
+  "/:id/material/selections/rows",
+  requirePermission("residential.projects.update"),
+  materialController.addRow,
+);
+router.delete(
+  "/:id/material/selections/rows/:rowId",
+  requirePermission("residential.projects.update"),
+  materialController.removeRow,
+);
+
+router.get(
+  "/:id/site-management",
+  requirePermission("residential.projects.view"),
+  siteManagementController.get,
+);
+router.post(
+  "/:id/site-management/initialize",
+  requirePermission("residential.projects.update"),
+  siteManagementController.initialize,
+);
+router.put(
+  "/:id/site-management",
+  requirePermission("residential.projects.update"),
+  siteManagementController.update,
+);
+router.post(
+  "/:id/site-management/rows",
+  requirePermission("residential.projects.update"),
+  siteManagementController.addRow,
+);
+router.delete(
+  "/:id/site-management/rows/:rowId",
+  requirePermission("residential.projects.update"),
+  siteManagementController.removeRow,
+);
+
+router.get(
+  "/:id/agreement",
+  requirePermission("residential.projects.view"),
+  projectAgreementController.getAgreement,
+);
+router.put(
+  "/:id/agreement",
+  requirePermission("residential.projects.update"),
+  projectAgreementController.updateAgreement,
+);
+router.get(
+  "/:id/operation-agreement",
+  requirePermission("residential.projects.view"),
+  projectAgreementController.getAgreement,
+);
+router.put(
+  "/:id/operation-agreement",
+  requirePermission("residential.projects.update"),
+  projectAgreementController.updateAgreement,
+);
+router.get(
+  "/:id/agreement/pdf",
+  requirePermission("residential.projects.view"),
+  projectAgreementController.getAgreementPdf,
+);
+router.get(
+  "/:id/operation-agreement/pdf",
+  requirePermission("residential.projects.view"),
+  projectAgreementController.getAgreementPdf,
+);
+router.get(
+  "/:id/execution-agreement",
+  requirePermission("residential.projects.view"),
+  projectExecutionAgreementController.getExecutionAgreement,
+);
+router.put(
+  "/:id/execution-agreement",
+  requirePermission("residential.projects.update"),
+  projectExecutionAgreementController.updateExecutionAgreement,
+);
+
+router.get(
+  "/:id/approvals",
+  requirePermission("residential.projects.view"),
+  projectController.listApprovals,
+);
+router.post(
+  "/:id/approvals",
+  requirePermission("residential.projects.update"),
+  projectController.createApproval,
+);
+router.post(
+  "/:id/approvals/:approvalId/send",
+  requirePermission("residential.enquiries.quotation.send"),
+  projectController.sendApproval,
+);
+
+export default router;
