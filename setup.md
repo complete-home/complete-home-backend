@@ -18,7 +18,9 @@ cp .env.example .env
 | `MONGODB_URI`        | Mongo connection string                                     |
 | `JWT_SECRET`         | Sign access tokens (use a long random string in production) |
 | `JWT_ACCESS_EXPIRES` | Access token lifetime (default `25m`)                       |
-| `CORS_ORIGIN`        | Frontend origin (default `http://localhost:5173`)           |
+| `CORS_ORIGIN`        | Comma-separated browser origins (admin, website, localhost) |
+| `FRONTEND_URL`       | Admin portal URL (invite links, notifications)              |
+| `CORS_ALLOW_COMPLETEHOME` | `true` = also allow `https://*.completehome.co.in`   |
 | `SEED_ADMIN_*`       | Credentials created by `npm run seed`                       |
 
 ## 2. Seed database
@@ -111,10 +113,78 @@ Link payables to projects via `projectId` on obligations; names should match con
 | Issue                                     | Fix                                                                                                          |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `ECONNREFUSED` MongoDB                    | Start `mongod` or fix `MONGODB_URI`                                                                          |
-| CORS errors                               | Set `CORS_ORIGIN` to your Vite URL                                                                           |
+| CORS errors                               | Set `CORS_ORIGIN` (see Production deployment below). Restart API after `.env` changes. |
+| `Cannot reach API` / no CORS header       | API down, nginx misconfigured, or CORS middleware not running — check `GET /api/v1/health` |
 | 401 on enquiries                          | Log in via `POST /auth/login` and ensure `Authorization: Bearer <token>`                                     |
 | Login fails / network                     | Backend `PORT` must match frontend `VITE_API_URL` (default **4003**). Run `npm run seed` then `npm run dev`. |
 | `siteManagementController is not defined` | Ensure `project.routes.js` imports `../siteManagement/siteManagement.controller.js`                          |
 | `projectFinanceService is not defined`    | Ensure `project.controller.js` imports `./projectFinance.service.js`                                         |
 | Admin login                               | `USR41472786` / `securepassword123` (see `SEED_ADMIN_*` in backend `.env`)                                   |
 | Duplicate seed                            | Checklist seeds delete by `templateVersion` for their phase; safe for dev                                    |
+
+## Production deployment (`api.completehome.co.in`)
+
+### Backend `.env` (on server)
+
+Comment Development block, uncomment Production:
+
+```env
+# Development — comment out
+# CORS_ORIGIN=http://localhost:5173,http://localhost:5174
+# FRONTEND_URL=http://localhost:5173
+
+# Production — active
+CORS_ORIGIN=https://admin.completehome.co.in,https://completehome.co.in,https://www.completehome.co.in
+FRONTEND_URL=https://admin.completehome.co.in
+NODE_ENV=production
+CORS_ALLOW_COMPLETEHOME=true
+```
+
+Restart after every `.env` change: `pm2 restart complete-home-api` (or your process name).
+
+### Verify API is reachable
+
+```bash
+curl -i https://api.completehome.co.in/api/v1/health
+```
+
+Expect `200` with JSON body. If this fails, fix nginx/SSL/PM2 before debugging CORS.
+
+### Verify CORS preflight
+
+```bash
+curl -i -X OPTIONS "https://api.completehome.co.in/api/v1/auth/login" \
+  -H "Origin: https://admin.completehome.co.in" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type, Authorization"
+```
+
+Expect headers including:
+
+- `Access-Control-Allow-Origin: https://admin.completehome.co.in`
+- `Access-Control-Allow-Credentials: true`
+
+### Nginx (example)
+
+Ensure OPTIONS and `/api/` proxy to Node:
+
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:4003;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Do **not** return a static 404 for OPTIONS before the request reaches Node.
+
+### Admin frontend `.env` (build time)
+
+```env
+VITE_API_URL=https://api.completehome.co.in/api/v1
+```
+
+Rebuild and redeploy the admin app after changing `VITE_*` variables.

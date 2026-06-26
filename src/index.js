@@ -25,6 +25,11 @@ async function start() {
     console.log(
       `Complete Home API running on http://localhost:${env.port}/api/v1`,
     );
+    console.log(`CORS origins: ${env.corsOrigins.join(", ")}`);
+    if (env.corsAllowCompleteHomeDomains) {
+      console.log("CORS fallback: https://*.completehome.co.in enabled");
+    }
+    console.log(`Frontend URL: ${env.frontendUrl}`);
   });
 
   server.on("error", (err) => {
