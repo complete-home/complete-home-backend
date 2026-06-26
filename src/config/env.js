@@ -23,6 +23,9 @@ export const env = {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
+  /** Allow *.completehome.co.in when CORS_ORIGIN is not fully configured */
+  corsAllowCompleteHomeDomains:
+    process.env.CORS_ALLOW_COMPLETEHOME !== "false",
   seedAdminUserId: process.env.SEED_ADMIN_USER_ID || "USR41472786",
   seedAdminPassword: process.env.SEED_ADMIN_PASSWORD || "securepassword123",
   seedClientUserId: process.env.SEED_CLIENT_USER_ID || "CLTUSR2206",
@@ -31,3 +34,23 @@ export const env = {
   notifySmsEnabled: process.env.NOTIFY_SMS_ENABLED === "true",
   appPublicUrl: process.env.APP_PUBLIC_URL || "http://localhost:5173",
 };
+
+export function isAllowedCorsOrigin(origin) {
+  if (!origin) return true;
+  if (env.corsOrigins.includes(origin)) return true;
+  if (!env.corsAllowCompleteHomeDomains) return false;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== "https:" && protocol !== "http:") return false;
+    if (
+      hostname === "completehome.co.in" ||
+      hostname.endsWith(".completehome.co.in")
+    ) {
+      return true;
+    }
+    if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+  } catch {
+    return false;
+  }
+  return false;
+}

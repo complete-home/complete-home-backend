@@ -3,7 +3,7 @@ import cors from "cors";
 import morgan from "morgan";
 import path from "path";
 import { fileURLToPath } from "url";
-import { env } from "./config/env.js";
+import { isAllowedCorsOrigin } from "./config/env.js";
 import apiRoutes from "./routes/index.js";
 import { notFoundHandler } from "./core/middleware/notFound.js";
 import { errorHandler } from "./core/middleware/errorHandler.js";
@@ -16,7 +16,7 @@ export function createApp() {
   app.use(
     cors({
       origin(origin, callback) {
-        if (!origin || env.corsOrigins.includes(origin)) {
+        if (isAllowedCorsOrigin(origin)) {
           callback(null, true);
           return;
         }
