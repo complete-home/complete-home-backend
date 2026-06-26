@@ -100,3 +100,23 @@ export const deleteProductCategoryDescription = asyncHandler(
     );
   },
 );
+
+export const listMaterials = asyncHandler(async (req, res) => {
+  sendSuccess(res, await masterService.listMaterials({ module: req.query.module }));
+});
+
+export const createMaterial = asyncHandler(async (req, res) => {
+  sendSuccess(res, await masterService.createMaterial(req.body), 201);
+});
+
+export const previewMaterialCode = asyncHandler(async (req, res) => {
+  sendSuccess(res, await masterService.previewMaterialCode(req.body));
+});
+
+export const updateMaterial = asyncHandler(async (req, res) => {
+  sendSuccess(res, await masterService.updateMaterial(req.params.id, req.body));
+});
+
+export const deleteMaterial = asyncHandler(async (req, res) => {
+  sendSuccess(res, await masterService.deleteMaterial(req.params.id));
+});

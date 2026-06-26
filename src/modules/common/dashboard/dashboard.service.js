@@ -38,7 +38,11 @@ export async function getStaffDashboardStats(
   userId,
   { module = "residential" } = {},
 ) {
-  const user = await User.findById(userId).populate("designationId");
+  // ⚡ Get user with minimal data
+  const user = await User.findById(userId)
+    .select("userId designationId userType")
+    .populate("designationId", "name dashboardProfile")
+    .lean();
   if (!user) return null;
 
   const permissions = await resolveUserPermissions(user);
@@ -46,8 +50,15 @@ export async function getStaffDashboardStats(
     user.designationId?.dashboardProfile ||
     (await resolveDashboardProfile(user));
 
-  const widgets = {};
+  // ⚡ Mark overdue async - don't block response
+  markOverdueFollowUps().catch(() => {});
 
+  const widgets = {};
+  
+  // ⚡ PERFORMANCE: Parallelize all dashboard queries instead of sequential
+  const queries = [];
+  
+  // Enquiries widget
   if (hasPerm(permissions, "residential.enquiries.view")) {
     const filter = { businessModule: module };
     if (profile === "sales") {
@@ -55,58 +66,94 @@ export async function getStaffDashboardStats(
     } else if (profile === "project_manager" || profile === "pm") {
       filter.projectHeadId = user._id;
     }
-    const enquiries = await Enquiry.find(filter)
-      .select("code name status budget updatedAt")
-      .sort({ updatedAt: -1 })
-      .lean();
-    widgets.enquiries = {
-      total: enquiries.length,
-      byStatus: countByStatus(enquiries),
-      recent: enquiries.slice(0, 5).map((e) => ({
-        id: e._id.toString(),
-        code: e.code,
-        name: e.name,
-        status: e.status,
-        budget: e.budget,
-      })),
-    };
+    queries.push(
+      Enquiry.find(filter)
+        .select("code name status budget updatedAt")
+        .sort({ updatedAt: -1 })
+        .limit(50) // Limit to 50 instead of fetching all
+        .lean()
+        .then((enquiries) => {
+          widgets.enquiries = {
+            total: enquiries.length,
+            byStatus: countByStatus(enquiries),
+            recent: enquiries.slice(0, 5).map((e) => ({
+              id: e._id.toString(),
+              code: e.code,
+              name: e.name,
+              status: e.status,
+              budget: e.budget,
+            })),
+          };
+        })
+    );
   }
 
+  // Follow-ups widget
   if (hasPerm(permissions, "residential.enquiries.followup.view")) {
-    await markOverdueFollowUps();
     const followUpFilter = {};
     if (profile === "sales") {
-      const scopedEnquiries = await Enquiry.find({
-        businessModule: module,
-        salesHeadId: user._id,
-      })
-        .select("_id")
-        .lean();
-      followUpFilter.enquiryId = {
-        $in: scopedEnquiries.map((e) => e._id),
-      };
+      queries.push(
+        Enquiry.find({
+          businessModule: module,
+          salesHeadId: user._id,
+        })
+          .select("_id")
+          .lean()
+          .then((scopedEnquiries) => {
+            followUpFilter.enquiryId = {
+              $in: scopedEnquiries.map((e) => e._id),
+            };
+            return EnquiryFollowUp.find(followUpFilter)
+              .sort({ updatedAt: -1 })
+              .limit(20)
+              .lean();
+          })
+          .then((followUps) => {
+            const open = followUps.filter((f) =>
+              ["Scheduled", "Overdue"].includes(f.status),
+            );
+            widgets.followUps = {
+              openCount: open.length,
+              overdueCount: followUps.filter((f) => f.status === "Overdue").length,
+              upcoming: open.slice(0, 5).map((f) => ({
+                id: f._id.toString(),
+                enquiryId: f.enquiryId?.toString(),
+                type: f.type,
+                status: f.status,
+                scheduledAt: f.scheduledAt || f.date,
+                note: f.note,
+              })),
+            };
+          })
+      );
+    } else {
+      queries.push(
+        EnquiryFollowUp.find(followUpFilter)
+          .sort({ updatedAt: -1 })
+          .limit(20)
+          .lean()
+          .then((followUps) => {
+            const open = followUps.filter((f) =>
+              ["Scheduled", "Overdue"].includes(f.status),
+            );
+            widgets.followUps = {
+              openCount: open.length,
+              overdueCount: followUps.filter((f) => f.status === "Overdue").length,
+              upcoming: open.slice(0, 5).map((f) => ({
+                id: f._id.toString(),
+                enquiryId: f.enquiryId?.toString(),
+                type: f.type,
+                status: f.status,
+                scheduledAt: f.scheduledAt || f.date,
+                note: f.note,
+              })),
+            };
+          })
+      );
     }
-    const followUps = await EnquiryFollowUp.find(followUpFilter)
-      .sort({ updatedAt: -1 })
-      .limit(20)
-      .lean();
-    const open = followUps.filter((f) =>
-      ["Scheduled", "Overdue"].includes(f.status),
-    );
-    widgets.followUps = {
-      openCount: open.length,
-      overdueCount: followUps.filter((f) => f.status === "Overdue").length,
-      upcoming: open.slice(0, 5).map((f) => ({
-        id: f._id.toString(),
-        enquiryId: f.enquiryId?.toString(),
-        type: f.type,
-        status: f.status,
-        scheduledAt: f.scheduledAt || f.date,
-        note: f.note,
-      })),
-    };
   }
 
+  // Projects widget
   if (hasPerm(permissions, "residential.projects.view")) {
     const projectFilter = { businessModule: module };
     if (profile === "project_manager" || profile === "pm") {
@@ -114,67 +161,86 @@ export async function getStaffDashboardStats(
     } else if (profile === "sales") {
       projectFilter.salesHeadId = user._id;
     }
-    const projects = await Project.find(projectFilter)
-      .select("code name status progress updatedAt")
-      .sort({ updatedAt: -1 })
-      .lean();
-    widgets.projects = {
-      total: projects.length,
-      byStatus: countByStatus(projects),
-      recent: projects.slice(0, 5).map((p) => ({
-        id: p._id.toString(),
-        code: p.code,
-        name: p.name,
-        status: p.status,
-        progress: p.progress,
-      })),
-    };
-  }
-
-  if (hasPerm(permissions, "residential.tasks.view")) {
-    const tasks = await Task.find({ businessModule: module })
-      .select("title status priority dueDate assigneeInitials")
-      .sort({ updatedAt: -1 })
-      .lean();
-    const myTasks = tasks.filter(
-      (t) =>
-        (t.assignedIds || []).includes(userId) ||
-        (t.assignedIds || []).includes(user.userId),
+    queries.push(
+      Project.find(projectFilter)
+        .select("code name status progress updatedAt")
+        .sort({ updatedAt: -1 })
+        .limit(50)
+        .lean()
+        .then((projects) => {
+          widgets.projects = {
+            total: projects.length,
+            byStatus: countByStatus(projects),
+            recent: projects.slice(0, 5).map((p) => ({
+              id: p._id.toString(),
+              code: p.code,
+              name: p.name,
+              status: p.status,
+              progress: p.progress,
+            })),
+          };
+        })
     );
-    widgets.tasks = {
-      total: tasks.length,
-      myOpen: myTasks.filter((t) => t.status !== "Done").length,
-      byStatus: countByStatus(tasks),
-      recent: (myTasks.length ? myTasks : tasks).slice(0, 6).map((t) => ({
-        id: t._id.toString(),
-        title: t.title,
-        status: t.status,
-        priority: t.priority,
-        dueDate: t.dueDate,
-        assigneeInitials: t.assigneeInitials,
-      })),
-    };
   }
 
-  if (hasPerm(permissions, "residential.quotations.view")) {
-    const quotes = await Quotation.find({ businessModule: module })
-      .select("code name status variantLabel amount")
-      .sort({ updatedAt: -1 })
-      .limit(8)
-      .lean();
-    widgets.quotations = {
-      total: quotes.length,
-      byStatus: countByStatus(quotes),
-      recent: quotes.slice(0, 5).map((q) => ({
-        id: q._id.toString(),
-        code: q.code,
-        name: q.name,
-        status: q.status,
-        variantLabel: q.variantLabel,
-        amount: q.amount,
-      })),
-    };
+  // Tasks widget
+  if (hasPerm(permissions, "residential.tasks.view")) {
+    queries.push(
+      Task.find({ businessModule: module })
+        .select("title status priority dueDate assigneeInitials assignedIds")
+        .sort({ updatedAt: -1 })
+        .limit(100)
+        .lean()
+        .then((tasks) => {
+          const myTasks = tasks.filter(
+            (t) =>
+              (t.assignedIds || []).includes(userId) ||
+              (t.assignedIds || []).includes(user.userId),
+          );
+          widgets.tasks = {
+            total: tasks.length,
+            myOpen: myTasks.filter((t) => t.status !== "done").length,
+            byStatus: countByStatus(tasks),
+            recent: (myTasks.length ? myTasks : tasks).slice(0, 6).map((t) => ({
+              id: t._id.toString(),
+              title: t.title,
+              status: t.status,
+              priority: t.priority,
+              dueDate: t.dueDate,
+              assigneeInitials: t.assigneeInitials,
+            })),
+          };
+        })
+    );
   }
+
+  // Quotations widget
+  if (hasPerm(permissions, "residential.quotations.view")) {
+    queries.push(
+      Quotation.find({ businessModule: module })
+        .select("code name status variantLabel amount")
+        .sort({ updatedAt: -1 })
+        .limit(20)
+        .lean()
+        .then((quotes) => {
+          widgets.quotations = {
+            total: quotes.length,
+            byStatus: countByStatus(quotes),
+            recent: quotes.slice(0, 5).map((q) => ({
+              id: q._id.toString(),
+              code: q.code,
+              name: q.name,
+              status: q.status,
+              variantLabel: q.variantLabel,
+              amount: q.amount,
+            })),
+          };
+        })
+    );
+  }
+
+  // ⚡ Execute all queries in parallel
+  await Promise.all(queries);
 
   return {
     profile,

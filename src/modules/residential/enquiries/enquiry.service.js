@@ -145,8 +145,11 @@ export async function listEnquiries({
   }
 
   const skip = Math.max(0, (Number(page) - 1) * Number(limit));
+  
+  // ⚡ PERFORMANCE: Run queries in parallel + use lean()
   const [rows, total] = await Promise.all([
     Enquiry.find(filter)
+      .select("code name mobile budget status source talkingPoint workType salesHeadId projectHeadId createdAt updatedAt clientId")
       .populate("salesHeadId", "name userId")
       .populate("projectHeadId", "name userId")
       .sort({ createdAt: -1 })
@@ -156,10 +159,22 @@ export async function listEnquiries({
     Enquiry.countDocuments(filter),
   ]);
 
-  const items = await attachRegisterSummaries(rows);
-
+  // ⚡ PERFORMANCE: Skip register summaries for faster list load
+  // Register data is only needed on detail view
   return {
-    items,
+    items: rows.map((r) => formatEnquiry({
+      ...r,
+      register: {
+        visitDate: null,
+        visitWhen: "",
+        quotationStatus: "",
+        quotationDone: false,
+        advancePaid: 0,
+        advanceCount: 0,
+        projectId: null,
+        projectCode: "",
+      },
+    })),
     meta: { total, page: Number(page), limit: Number(limit) },
   };
 }
@@ -175,16 +190,17 @@ export async function getEnquiryById(id) {
 }
 
 export async function getEnquiryDetail(id, quotationId) {
-  const enquiry = await Enquiry.findById(id);
+  const enquiry = await Enquiry.findById(id).lean();
   if (!enquiry) throw AppError.notFound(Messages.enquiry.notFound);
 
-  await markOverdueFollowUps({ enquiryId: id });
+  // Mark overdue async to not block response
+  markOverdueFollowUps({ enquiryId: id }).catch(() => {});
 
   const [activityLogs, followUps, appointment, payments] = await Promise.all([
-    EnquiryActivity.find({ enquiryId: id }).sort({ createdAt: -1 }),
-    EnquiryFollowUp.find({ enquiryId: id }).sort({ createdAt: -1 }),
-    EnquiryAppointment.findOne({ enquiryId: id }),
-    EnquiryPayment.find({ enquiryId: id }).sort({ createdAt: -1 }),
+    EnquiryActivity.find({ enquiryId: id }).sort({ createdAt: -1 }).lean(),
+    EnquiryFollowUp.find({ enquiryId: id }).sort({ createdAt: -1 }).lean(),
+    EnquiryAppointment.findOne({ enquiryId: id }).lean(),
+    EnquiryPayment.find({ enquiryId: id }).sort({ createdAt: -1 }).lean(),
   ]);
 
   const [quotations, quotation] = await Promise.all([

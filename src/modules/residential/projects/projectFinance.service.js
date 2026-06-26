@@ -3,6 +3,7 @@ import { docId } from "../../../core/http/formatHelpers.js";
 import { paymentAmountNumeric, roundMoney } from "../../../core/utils/money.js";
 import PayableObligation from "../../common/payables/payableObligation.model.js";
 import PayableLedgerEntry from "../../common/payables/payableLedgerEntry.model.js";
+import FinanceTransaction from "../../common/finance/financeTransaction.model.js";
 import EnquiryPayment from "../enquiries/enquiryPayment.model.js";
 import Project from "./project.model.js";
 import ProjectAgreement from "./projectAgreement.model.js";
@@ -145,6 +146,17 @@ export async function getProjectFinanceSummary(projectId) {
     /* site management may not be initialized */
   }
 
+  const financeTxns = await FinanceTransaction.find({
+    projectId: project._id,
+    status: "completed",
+  }).lean();
+  let txnCashIn = 0;
+  let txnCashOut = 0;
+  for (const t of financeTxns) {
+    if (t.transactionType === "cash_in") txnCashIn += t.amount;
+    else txnCashOut += t.amount;
+  }
+
   return {
     currency: "INR",
     projectId: project._id.toString(),
@@ -179,5 +191,11 @@ export async function getProjectFinanceSummary(projectId) {
       balance: roundMoney(clientReceived - vendorPaid),
     },
     payees: payeesSummary,
+    cashflow: {
+      cashIn: roundMoney(txnCashIn),
+      cashOut: roundMoney(txnCashOut),
+      net: roundMoney(txnCashIn - txnCashOut),
+      transactionCount: financeTxns.length,
+    },
   };
 }

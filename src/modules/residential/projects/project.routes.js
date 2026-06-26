@@ -118,6 +118,16 @@ router.get(
   projectController.getFinanceLedger,
 );
 router.get(
+  "/:id/team-hub",
+  requirePermission("residential.projects.view"),
+  projectController.getTeamHub,
+);
+router.patch(
+  "/:id/team-hub",
+  requirePermission("residential.projects.update"),
+  projectController.updateTeamHub,
+);
+router.get(
   "/:id/phases",
   requirePermission("residential.projects.view"),
   projectController.getPhases,

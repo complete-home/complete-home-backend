@@ -117,6 +117,35 @@ function renderFlatSections(products, services, showProducts, showRate, showGst,
   return productsSection + servicesSection;
 }
 
+function renderCategorySectionsPdf(sections, heading, accent = "#00695c") {
+  if (!sections?.length) return "";
+  return sections
+    .map((section) => {
+      const items = (section.items || [])
+        .map(
+          (item) => `
+        <tr>
+          <td>${escapeHtml(item.title)}</td>
+          <td>${escapeHtml(item.description || "—")}</td>
+          <td class="num">${escapeHtml(item.lineTotalFormatted || `₹${Math.round(Number(item.lineTotal) || 0).toLocaleString("en-IN")}`)}</td>
+        </tr>`,
+        )
+        .join("");
+      const sectionTotal = section.sectionTotalFormatted
+        || `₹${Math.round(Number(section.sectionTotal) || 0).toLocaleString("en-IN")}`;
+      return `
+    <div class="quote-section">
+      <h3 class="section-head" style="color:${accent}">${escapeHtml(section.categoryLabel)}</h3>
+      <table class="lines">
+        <thead><tr><th>Item</th><th>Description</th><th class="num">Amount</th></tr></thead>
+        <tbody>${items}</tbody>
+        <tfoot><tr><td colspan="2" class="section-sub">Section total</td><td class="num section-sub">${escapeHtml(sectionTotal)}</td></tr></tfoot>
+      </table>
+    </div>`;
+    })
+    .join("");
+}
+
 function renderPaymentSchedule(schedule) {
   if (!schedule?.length) return "";
   const rows = schedule
@@ -172,21 +201,32 @@ export async function buildQuotationPdfHtml(enquiryId, quotationId) {
         q.formatType,
       );
 
+  const categoryBlock = renderCategorySectionsPdf(
+    q.categorySections,
+    "Scope breakdown",
+  );
+  const extraWorkBlock = q.extraWorkEnabled
+    ? `<div class="extra-work-wrap">
+        <h2 style="color:#e65100">Extra Work</h2>
+        ${renderCategorySectionsPdf(q.extraWorkSections, "Extra work", "#e65100")}
+        ${
+          q.extraWorkGrandTotal
+            ? `<p class="extra-total">Extra work total: <strong>${escapeHtml(`₹${Math.round(Number(q.extraWorkGrandTotal) || 0).toLocaleString("en-IN")}`)}</strong></p>`
+            : ""
+        }
+      </div>`
+    : "";
+
+  const logoUrl = company?.logoUrl || "/assets/logo.png";
+  const companyAddress =
+    company?.address || "Complete Home — Plan • Design • Build";
+
   const billToBlock = `
-    <div class="bill-to">
-      <strong>Bill To</strong><br/>
+    <div class="meta-box">
+      <strong>Bill To</strong>
       ${escapeHtml(clientName)}<br/>
       ${enquiry?.mobile ? `Mo. ${escapeHtml(enquiry.mobile)}<br/>` : ""}
       ${enquiry?.fullAddress || enquiry?.address ? escapeHtml(enquiry.fullAddress || enquiry.address) : ""}
-    </div>`;
-
-  const companyBlock = `
-    <div class="company-meta">
-      ${company?.address ? `${escapeHtml(company.address)}<br/>` : ""}
-      ${company?.mobile ? `Phone: ${escapeHtml(company.mobile)}<br/>` : ""}
-      ${company?.email ? `Email: ${escapeHtml(company.email)}<br/>` : ""}
-      ${company?.gstin ? `GSTIN: ${escapeHtml(company.gstin)}<br/>` : ""}
-      ${company?.state ? `State: ${escapeHtml(company.state)}` : ""}
     </div>`;
 
   return `<!DOCTYPE html>
@@ -195,54 +235,143 @@ export async function buildQuotationPdfHtml(enquiryId, quotationId) {
   <meta charset="utf-8" />
   <title>${escapeHtml(q.code)} — ${escapeHtml(companyName)}</title>
   <style>
+    @page { margin: 18mm 14mm; }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; color: #212121; margin: 0; padding: 24px 32px; font-size: 13px; }
-    .header { display: flex; justify-content: space-between; border-bottom: 2px solid #00897b; padding-bottom: 12px; margin-bottom: 20px; }
-    .brand { font-size: 18px; font-weight: 700; color: #00897b; }
-    .meta { text-align: right; font-size: 12px; color: #616161; }
-    h1 { font-size: 20px; margin: 0 0 4px; }
-    .badge { display: inline-block; background: #e0f2f1; color: #00897b; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-    h3 { font-size: 12px; text-transform: uppercase; color: #757575; margin: 20px 0 8px; }
-    h3.section-head { font-size: 14px; color: #00897b; text-transform: none; margin-top: 16px; }
-    .bill-to { background: #00695c; color: #fff; padding: 12px 16px; border-radius: 4px; margin: 12px 0 20px; font-size: 13px; }
-    .company-meta { font-size: 12px; color: #616161; margin-top: 4px; }
-    table.lines { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    table.lines th, table.lines td { border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; }
-    table.lines th { background: #fafafa; font-size: 11px; text-transform: uppercase; color: #757575; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: #1a1a1a;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+      line-height: 1.5;
+      font-size: 13px;
+      position: relative;
+    }
+    .watermark {
+      position: fixed;
+      top: 42%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-28deg);
+      font-size: 72px;
+      font-weight: 700;
+      color: rgba(0, 137, 123, 0.07);
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 0;
+      letter-spacing: 6px;
+    }
+    .content { position: relative; z-index: 1; }
+    .header {
+      text-align: center;
+      border-bottom: 3px solid #00897b;
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+    }
+    .header img { height: 56px; margin-bottom: 8px; }
+    .header .brand { font-size: 18px; font-weight: 700; color: #00695c; }
+    .header .tagline { color: #757575; font-size: 12px; }
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      font-size: 12px;
+    }
+    .meta-box {
+      background: #f8fafb;
+      border: 1px solid #e8ecef;
+      border-radius: 8px;
+      padding: 12px 14px;
+      flex: 1;
+    }
+    .meta-box strong { color: #00695c; display: block; margin-bottom: 4px; }
+    h1 { font-size: 20px; margin: 0 0 6px; color: #212121; }
+    .badge {
+      display: inline-block;
+      background: #e0f2f1;
+      color: #00897b;
+      padding: 2px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    h2 { font-size: 14px; color: #00695c; margin: 20px 0 8px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
+    h3.section-head { font-size: 13px; text-transform: none; margin-top: 12px; }
+    .extra-work-wrap {
+      margin: 20px 0;
+      padding: 14px;
+      background: #fff8e1;
+      border: 1px solid #ffcc80;
+      border-radius: 8px;
+    }
+    .extra-total { text-align: right; font-size: 13px; margin-top: 8px; }
+    table.lines { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 12px; }
+    table.lines th, table.lines td { border: 1px solid #ddd; padding: 7px 9px; text-align: left; }
+    table.lines th { background: #e0f2f1; color: #004d40; font-size: 11px; text-transform: uppercase; }
     table.lines.summary { max-width: 480px; }
     td.num { text-align: right; }
     .section-sub { font-weight: 700; background: #f5f5f5; }
     .quote-section { margin-bottom: 8px; }
-    .totals { margin-left: auto; width: 280px; margin-top: 16px; }
-    .totals div { display: flex; justify-content: space-between; padding: 4px 0; }
-    .totals .grand { font-weight: 700; font-size: 16px; color: #00897b; border-top: 1px solid #e0e0e0; padding-top: 8px; margin-top: 8px; }
-    .terms { margin-top: 24px; padding: 12px; background: #fafafa; border: 1px solid #e0e0e0; white-space: pre-wrap; }
-    @media print { body { padding: 12px; } .no-print { display: none; } }
+    .totals { margin-left: auto; width: 300px; margin-top: 16px; }
+    .totals div { display: flex; justify-content: space-between; padding: 5px 0; }
+    .totals .grand {
+      font-weight: 700;
+      font-size: 16px;
+      color: #00897b;
+      border-top: 2px solid #00897b;
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+    .terms {
+      margin-top: 24px;
+      padding: 12px 14px;
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #e0e0e0;
+      text-align: center;
+      font-size: 11px;
+      color: #757575;
+    }
+    @media print { .no-print { display: none; } body { padding: 0; } }
   </style>
 </head>
 <body>
+  <div class="watermark">COMPLETE HOME</div>
+  <div class="content">
   <div class="no-print" style="margin-bottom:16px">
     <button onclick="window.print()" style="background:#00897b;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:600">Print / Save as PDF</button>
   </div>
   <div class="header">
-    <div>
-      <div class="brand">${escapeHtml(companyName)}</div>
-      ${company?.website ? `<div style="font-size:12px;color:#616161">${escapeHtml(company.website)}</div>` : ""}
-      ${companyBlock}
+    <img src="${escapeHtml(logoUrl)}" alt="Logo" onerror="this.style.display='none'" />
+    <div class="brand">${escapeHtml(companyName)}</div>
+    <div class="tagline">Plan • Design • Build</div>
+    <div style="font-size:12px;color:#616161;margin-top:6px">${escapeHtml(companyAddress)}</div>
+    ${company?.mobile ? `<div style="font-size:12px;color:#616161">Phone: ${escapeHtml(company.mobile)}</div>` : ""}
+    ${company?.email ? `<div style="font-size:12px;color:#616161">Email: ${escapeHtml(company.email)}</div>` : ""}
+    ${company?.gstin ? `<div style="font-size:12px;color:#616161">GSTIN: ${escapeHtml(company.gstin)}</div>` : ""}
+  </div>
+  <div class="meta-row">
+    <div class="meta-box">
+      <strong>Quotation</strong>
+      ${escapeHtml(q.code)}<br/>
+      Date: ${escapeHtml(q.createdAt)}<br/>
+      Status: ${escapeHtml(q.status)}
     </div>
-    <div class="meta">
-      <div><strong>${escapeHtml(q.code)}</strong></div>
-      <div>Date: ${escapeHtml(q.createdAt)}</div>
-      <div>Status: ${escapeHtml(q.status)}</div>
-    </div>
+    ${billToBlock}
   </div>
   <h1>${escapeHtml(q.variantLabel || q.name)}</h1>
   <span class="badge">${escapeHtml(formatLabel)}</span>
-  ${billToBlock}
-  ${lineSections}
+  ${categoryBlock || lineSections}
+  ${extraWorkBlock}
   ${renderPaymentSchedule(q.paymentSchedule)}
   ${
-    q.showRate
+    q.showRate || categoryBlock || extraWorkBlock
       ? `<div class="totals">
     <div><span>Subtotal</span><span>${escapeHtml(q.subtotal)}</span></div>
     <div><span>Tax (${escapeHtml(q.taxPercent)}%)</span><span>${escapeHtml(q.taxAmount)}</span></div>
@@ -260,6 +389,11 @@ export async function buildQuotationPdfHtml(enquiryId, quotationId) {
       ? `<div class="terms"><strong>Terms &amp; conditions</strong><br/>${escapeHtml(q.termsText)}</div>`
       : ""
   }
+  <div class="footer">
+    ${escapeHtml(companyName)} · ${escapeHtml(company?.website || "www.completehome.in")}<br/>
+    This is a computer-generated quotation and is valid subject to terms stated above.
+  </div>
+  </div>
 </body>
 </html>`;
 }

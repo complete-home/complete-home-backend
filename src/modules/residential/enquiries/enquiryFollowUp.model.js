@@ -24,4 +24,9 @@ const enquiryFollowUpSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// Performance indexes
+enquiryFollowUpSchema.index({ enquiryId: 1, createdAt: -1 });
+enquiryFollowUpSchema.index({ status: 1, scheduledAt: 1 });
+enquiryFollowUpSchema.index({ date: 1, status: 1 });
+
 export default mongoose.model("EnquiryFollowUp", enquiryFollowUpSchema);

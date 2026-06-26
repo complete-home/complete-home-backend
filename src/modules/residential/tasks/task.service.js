@@ -32,24 +32,18 @@ export async function listTasks({ moduleId, projectId } = {}) {
   const filter = {};
   if (moduleId) filter.businessModule = moduleId;
   if (projectId) filter.projectId = projectId;
-  const rows = await Task.find(filter).sort({ updatedAt: -1 });
-  const { syncTaskTimeliness } =
-    await import("../../workforce/timeliness.service.js");
-  const out = [];
-  for (const row of rows) {
-    if (row.status !== "done") {
-      await syncTaskTimeliness(row, { event: "status_sync" });
-      const fresh = await Task.findById(row._id);
-      out.push(formatTask(fresh));
-    } else {
-      out.push(formatTask(row));
-    }
-  }
-  return out;
+  
+  // PERFORMANCE FIX: Remove sync on fetch - only sync on status change
+  // This eliminates 100+ extra DB queries per request
+  const rows = await Task.find(filter)
+    .sort({ updatedAt: -1 })
+    .lean();
+  
+  return rows.map(formatTask);
 }
 
 export async function getTaskById(id) {
-  const row = await Task.findById(id);
+  const row = await Task.findById(id).lean();
   if (!row) throw AppError.notFound("Task not found");
   return formatTask(row);
 }
@@ -74,11 +68,12 @@ export async function createTask(body) {
     stage: body.stage || "",
     businessModule: body.businessModule || "residential",
   });
+  // Sync timeliness asynchronously on create
   const { syncTaskTimeliness } =
     await import("../../workforce/timeliness.service.js");
-  await syncTaskTimeliness(task, { event: "deadline_set" });
-  const fresh = await Task.findById(task._id);
-  return formatTask(fresh);
+  syncTaskTimeliness(task, { event: "deadline_set" }).catch(() => {});
+  
+  return formatTask(task);
 }
 
 export async function updateTask(id, body) {
@@ -105,26 +100,33 @@ export async function updateTask(id, body) {
       `Invalid status. Allowed: ${TASK_STATUSES.join(", ")}`,
     );
   }
-  const prev = await Task.findById(id);
+  const prev = await Task.findById(id).lean();
   if (!prev) throw AppError.notFound("Task not found");
-  const task = await Task.findByIdAndUpdate(id, patch, { new: true });
+  const task = await Task.findByIdAndUpdate(id, patch, { new: true }).lean();
+  
+  // Sync timeliness async if status or deadline changed
+  if (patch.status !== undefined || patch.endDate !== undefined) {
+    const { syncTaskTimeliness } =
+      await import("../../workforce/timeliness.service.js");
+    syncTaskTimeliness(task, {
+      event: patch.status === "done" && prev.status !== "done" ? "completed" : "status_sync"
+    }).catch(() => {});
+  }
+  
+  // Apply rewards async
   if (
     patch.status === "done" &&
     prev.status !== "done" &&
     task.assignedIds?.length
   ) {
-    try {
-      const { applyRewardForEvent } =
-        await import("../../workforce/rewardRules.service.js");
-      for (const assigneeId of task.assignedIds) {
-        if (!assigneeId) continue;
-        await applyRewardForEvent("task_complete", assigneeId, {
-          refType: "task",
-          refId: task._id.toString(),
-        });
-      }
-    } catch {
-      /* rewards optional */
+    const { applyRewardForEvent } =
+      await import("../../workforce/rewardRules.service.js");
+    for (const assigneeId of task.assignedIds) {
+      if (!assigneeId) continue;
+      applyRewardForEvent("task_complete", assigneeId, {
+        refType: "task",
+        refId: task._id.toString(),
+      }).catch(() => {});
     }
   }
   return formatTask(task);

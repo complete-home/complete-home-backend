@@ -116,4 +116,30 @@ router.delete(
   masterController.deleteProductCategoryDescription,
 );
 
+router.get(
+  "/materials",
+  requirePermission("common.masters.products.view"),
+  masterController.listMaterials,
+);
+router.post(
+  "/materials",
+  requirePermission("common.masters.products.create"),
+  masterController.createMaterial,
+);
+router.post(
+  "/materials/preview-code",
+  requirePermission("common.masters.products.create"),
+  masterController.previewMaterialCode,
+);
+router.patch(
+  "/materials/:id",
+  requirePermission("common.masters.products.update"),
+  masterController.updateMaterial,
+);
+router.delete(
+  "/materials/:id",
+  requirePermission("common.masters.products.delete"),
+  masterController.deleteMaterial,
+);
+
 export default router;

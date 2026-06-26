@@ -5,6 +5,7 @@ import * as projectFinanceService from "./projectFinance.service.js";
 import * as projectPersonFinanceService from "./projectPersonFinance.service.js";
 import * as projectFinanceTabsService from "./projectFinanceTabs.service.js";
 import * as projectService from "./project.service.js";
+import * as projectTeamHubService from "./projectTeamHub.service.js";
 import * as financeGstService from "../../common/finance/financeGst.service.js";
 
 export const list = asyncHandler(async (req, res) => {
@@ -122,6 +123,17 @@ export const getFinanceLedger = asyncHandler(async (req, res) => {
   sendSuccess(
     res,
     await financeGstService.getProjectFinanceLedger(req.params.id, req.query),
+  );
+});
+
+export const getTeamHub = asyncHandler(async (req, res) => {
+  sendSuccess(res, await projectTeamHubService.getProjectTeamHub(req.params.id));
+});
+
+export const updateTeamHub = asyncHandler(async (req, res) => {
+  sendSuccess(
+    res,
+    await projectTeamHubService.updateProjectTeamHub(req.params.id, req.body),
   );
 });
 

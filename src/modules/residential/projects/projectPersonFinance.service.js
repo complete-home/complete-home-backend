@@ -172,7 +172,10 @@ export async function listProjectFinancePayees(projectId) {
       payablesCommitted: payables.committed,
       payablesPaid: payables.paid,
       payablesOutstanding: payables.outstanding,
+      totalAmountGiven: payables.paid,
+      remainingBalance: payables.outstanding,
       obligationCount: payables.obligations.length,
+      obligationId: payables.obligations[0]?.obligationId || null,
     });
   }
 
@@ -212,10 +215,33 @@ export async function getProjectFinancePayee(projectId, payeeKey) {
     entry?.aliases || [payee.displayName],
   );
 
+  const paymentHistory = [];
+  for (const ob of payables.obligations) {
+    const ledger = await PayableLedgerEntry.find({
+      obligationId: ob.obligationId,
+    })
+      .sort({ paidAt: -1 })
+      .lean();
+    for (const l of ledger) {
+      paymentHistory.push({
+        id: l._id.toString(),
+        obligationId: ob.obligationId,
+        amount: roundMoney(l.amount),
+        paymentMode: l.paymentMode || "",
+        reference: l.reference || "",
+        paidAt: l.paidAt,
+        note: l.note || "",
+      });
+    }
+  }
+
   return {
     ...payee,
     quoteRaw: entry?.quoteRaw || "",
     unit: entry?.unit || "",
     payables,
+    totalAmountGiven: payables.paid,
+    remainingBalance: payables.outstanding,
+    paymentHistory,
   };
 }

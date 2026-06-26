@@ -55,8 +55,16 @@ const projectSchema = new mongoose.Schema(
       executionPct: { type: Number, default: 0, min: 0, max: 100 },
       siteMgmtPct: { type: Number, default: 0, min: 0, max: 100 },
     },
+    teamHub: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true },
 );
+
+// Performance indexes
+projectSchema.index({ businessModule: 1, status: 1, updatedAt: -1 });
+projectSchema.index({ enquiryId: 1 });
+projectSchema.index({ salesHeadId: 1, status: 1 });
+projectSchema.index({ projectHeadId: 1, status: 1 });
+projectSchema.index({ status: 1, dueAt: 1 });
 
 export default mongoose.model("Project", projectSchema);

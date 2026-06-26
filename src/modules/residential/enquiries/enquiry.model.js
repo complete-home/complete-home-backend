@@ -51,12 +51,12 @@ const enquirySchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-enquirySchema.index({ businessModule: 1, status: 1 });
+enquirySchema.index({ businessModule: 1, status: 1, createdAt: -1 });
+enquirySchema.index({ businessModule: 1, createdAt: -1 });
 enquirySchema.index({ source: 1 });
 enquirySchema.index({ talkingPoint: 1 });
-enquirySchema.index({ salesHeadId: 1 });
-enquirySchema.index({ projectHeadId: 1 });
-enquirySchema.index({ createdAt: -1 });
+enquirySchema.index({ salesHeadId: 1, status: 1 });
+enquirySchema.index({ projectHeadId: 1, status: 1 });
 
 export { ENQUIRY_STATUSES };
 export default mongoose.model("Enquiry", enquirySchema);

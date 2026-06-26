@@ -86,16 +86,21 @@ function calcTotals(doc) {
   }
   const categorySum = calcCategorySectionsGrandTotal(doc.categorySections || []);
   if (categorySum > 0) sum = categorySum;
+  const extraSum = doc.extraWorkEnabled
+    ? calcCategorySectionsGrandTotal(doc.extraWorkSections || [])
+    : 0;
+  const totalBeforeTax = sum + extraSum;
   const taxPct = parseFloat(doc.taxPercent) || 18;
-  const tax = (sum * taxPct) / 100;
+  const tax = (totalBeforeTax * taxPct) / 100;
   const fmt = (n) => `₹${Math.round(n).toLocaleString("en-IN")}`;
   return {
-    subtotal: fmt(sum),
+    subtotal: fmt(totalBeforeTax),
     taxAmount: fmt(tax),
-    grandTotal: fmt(sum + tax),
-    amount: fmt(sum + tax),
-    subtotalNumeric: sum,
+    grandTotal: fmt(totalBeforeTax + tax),
+    amount: fmt(totalBeforeTax + tax),
+    subtotalNumeric: totalBeforeTax,
     categoryGrandTotal: String(categorySum),
+    extraWorkGrandTotal: String(extraSum),
     groupSubtotals: buildGroupSubtotals(items),
   };
 }
@@ -219,6 +224,12 @@ export function formatQuotationDetail(doc) {
     categoryGrandTotal:
       o.categoryGrandTotal ||
       String(calcCategorySectionsGrandTotal(o.categorySections || [])),
+    extraWorkEnabled: !!o.extraWorkEnabled,
+    extraWorkSections: formatCategorySections(o.extraWorkSections),
+    extraWorkGrandTotal: String(
+      calcCategorySectionsGrandTotal(o.extraWorkSections || []),
+    ),
+    baseAmountSnapshot: o.baseAmountSnapshot || "",
     copiedFromQuotationId: o.copiedFromQuotationId?.toString?.() || null,
     copiedFromQuotationCode: o.copiedFromQuotationCode || "",
     validityDays: o.validityDays || "",
@@ -618,6 +629,9 @@ export async function upsertEnquiryQuotation(enquiryId, body) {
     "selectedCategories",
     "categorySections",
     "categoryGrandTotal",
+    "extraWorkEnabled",
+    "extraWorkSections",
+    "baseAmountSnapshot",
     "validityDays",
     "validUntil",
     "scopeNotes",
@@ -692,6 +706,20 @@ export async function addQuotationItem(enquiryId, body) {
     quotation.products.push(item);
   } else {
     quotation.services.push(item);
+  }
+  if (body.itemType === "product" && body.catalogId) {
+    try {
+      const { adjustProductStock } =
+        await import("../../common/masters/master.service.js");
+      const deduct = Number(body.quantity) || 1;
+      await adjustProductStock(body.catalogId, -deduct, {
+        note: `Quotation ${quotation.code}`,
+        refType: "quotation",
+        refId: quotation._id.toString(),
+      });
+    } catch {
+      /* catalog may not be a product master record */
+    }
   }
   const totals = calcTotals(quotation);
   Object.assign(quotation, totals);
@@ -968,6 +996,19 @@ export async function deleteQuotationItem(
   const listName = listType === "product" ? "products" : "services";
   const item = quotation[listName].id(itemId);
   if (!item) throw AppError.notFound("Line item not found");
+  if (listType === "product" && item.catalogId) {
+    try {
+      const { adjustProductStock } =
+        await import("../../common/masters/master.service.js");
+      await adjustProductStock(item.catalogId, Number(item.quantity) || 1, {
+        note: `Removed from quotation ${quotation.code}`,
+        refType: "quotation",
+        refId: quotation._id.toString(),
+      });
+    } catch {
+      /* ignore */
+    }
+  }
   item.deleteOne();
   const totals = calcTotals(quotation);
   Object.assign(quotation, totals);

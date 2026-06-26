@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import AppError from "../../../core/errors/AppError.js";
+import { clearPermissionCache } from "../../../core/middleware/auth.js";
 import { nextCode } from "../../../core/counters/counter.service.js";
 import { docId, getInitials } from "../../../core/http/formatHelpers.js";
 import User from "./user.model.js";
@@ -281,4 +282,12 @@ export async function deleteEmployee(id) {
   });
   if (!user) throw AppError.notFound("Employee not found");
   return { id };
+}
+
+export function invalidateUserPermissionCache(userId) {
+  clearPermissionCache(userId);
+}
+
+export function invalidateAllPermissionCaches() {
+  clearPermissionCache();
 }

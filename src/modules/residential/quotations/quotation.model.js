@@ -142,6 +142,9 @@ const quotationSchema = new mongoose.Schema(
     categorySections: [categorySectionSchema],
     paymentMilestones: [paymentMilestoneSchema],
     categoryGrandTotal: { type: String, default: "" },
+    extraWorkEnabled: { type: Boolean, default: false },
+    extraWorkSections: [categorySectionSchema],
+    baseAmountSnapshot: { type: String, default: "" },
     copiedFromQuotationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Quotation",
